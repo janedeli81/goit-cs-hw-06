@@ -5,13 +5,15 @@ import os
 import json
 from datetime import datetime
 from pymongo import MongoClient
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs
 
 PORT = 3000
 SOCKET_PORT = 5000
 DB_HOST = 'mongodb://localhost:27017/'
 DB_NAME = 'messages'
 COLLECTION_NAME = 'records'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 # Socket Server
 def socket_server():
@@ -30,11 +32,13 @@ def socket_server():
                     data_dict = json.loads(data.decode('utf-8'))
                     save_to_mongo(data_dict)
 
+
 def save_to_mongo(data_dict):
     client = MongoClient(DB_HOST)
     db = client[DB_NAME]
     collection = db[COLLECTION_NAME]
     collection.insert_one(data_dict)
+
 
 # HTTP Server
 class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -43,15 +47,23 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.path = '/index.html'
         elif self.path == '/message':
             self.path = '/message.html'
+
+        # Construct the full path to serve
+        file_path = os.path.join(BASE_DIR, self.path[1:])
+
         try:
-            file_to_open = open(self.path[1:]).read()
+            with open(file_path, 'rb') as f:
+                content = f.read()
             self.send_response(200)
+            self.end_headers()
+            self.wfile.write(content)
         except FileNotFoundError:
-            self.path = '/error.html'
-            file_to_open = open(self.path[1:]).read()
+            error_path = os.path.join(BASE_DIR, 'error.html')
+            with open(error_path, 'rb') as f:
+                content = f.read()
             self.send_response(404)
-        self.end_headers()
-        self.wfile.write(bytes(file_to_open, 'utf-8'))
+            self.end_headers()
+            self.wfile.write(content)
 
     def do_POST(self):
         if self.path == '/submit':
@@ -70,9 +82,11 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Location', '/message')
             self.end_headers()
 
+
 if __name__ == '__main__':
     # Run HTTP server in a separate process
     from multiprocessing import Process
+
     p = Process(target=socket_server)
     p.start()
 
